@@ -82,10 +82,21 @@ def write_to_gsheets(gc, spreadsheet_name: str, dataframes: dict):
             # If it doesn't exist, create a new one
             worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="26")
 
-        # ✅ Replace NaN with empty strings and convert to strings
+        # Replace NaN with empty strings and convert to strings
         values = [df.columns.tolist()] + df.fillna("").astype(str).values.tolist()
         worksheet.update(values)
 
+     # Add timestamp sheet
+    timestamp_sheet_name = "LastUpdated"
+    timestamp_value = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        ts_sheet = sh.worksheet(timestamp_sheet_name)
+        ts_sheet.clear()
+    except gspread.WorksheetNotFound:
+        ts_sheet = sh.add_worksheet(title=timestamp_sheet_name, rows="10", cols="2")
+    
+    ts_sheet.update([["Last Updated"], [timestamp_value]])
+   
     print(f"Data written to Google Sheet '{spreadsheet_name}'")    
 
 def write_to_excel(dataframes: dict, output_dir: str = "data") -> tuple:
@@ -139,7 +150,6 @@ def main():
         "Milestones": df_milestones
     }
     
-
     # THIS BLOCK WRITES TO EXCEL
     # excel_path, excel_filename = write_to_excel(dataframes)
     
