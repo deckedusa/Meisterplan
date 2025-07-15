@@ -1,8 +1,12 @@
 import os
 import requests
 import pandas as pd
+import gspread
+import argparse
+from gspread_dataframe import set_with_dataframe
 from datetime import datetime
 from dotenv import load_dotenv
+# from Scripts.gspread_init import gspreadoauth
 
 # load API token and variables from .env file
 load_dotenv()
@@ -19,11 +23,6 @@ headers = {
     "Authorization": f"Bearer {MP_TOKEN}",
     "Accept": "application/json"
 }
-
-# Output file path with timestamp
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-output_filename = f"meisterplan_full_export_{timestamp}.xlsx"
-output_filepath = os.path.join("data", output_filename)
 
 # Generic fetcher to support pagination
 def fetch_paginated(endpoint):
@@ -43,7 +42,81 @@ def fetch_paginated(endpoint):
             url = MP_URL + url
     return all_items
 
+def authenticate_gsheets():
+    cred_path = os.path.join("credentials", "credentials.json")
+    auth_path = os.path.join("credentials", "auth_user.json")
+
+    try:
+        gc = gspread.oauth(
+            credentials_filename=cred_path,
+            authorized_user_filename=auth_path
+        )
+        return gc
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        return None
+
+def write_to_gsheets(gc, spreadsheet_name: str, dataframes: dict):
+    """
+    Writes multiple DataFrames to tabs in a Google Sheet, replacing existing data.
+    
+    Args:
+        gc: Authenticated gspread client.
+        spreadsheet_name (str): Name of the Google Sheet.
+        dataframes (dict): Dictionary where keys are tab names and values are DataFrames.
+    """
+    try:
+        # Open the spreadsheet (must exist beforehand and be shared with service account)
+        sh = gc.open(spreadsheet_name)
+    except gspread.SpreadsheetNotFound:
+        print(f"Spreadsheet '{spreadsheet_name}' not found.")
+        return
+
+    for sheet_name, df in dataframes.items():
+        try:
+            # Try to open the worksheet
+            worksheet = sh.worksheet(sheet_name)
+            # Clear existing contents
+            worksheet.clear()
+        except gspread.WorksheetNotFound:
+            # If it doesn't exist, create a new one
+            worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="26")
+
+        # ✅ Replace NaN with empty strings and convert to strings
+        values = [df.columns.tolist()] + df.fillna("").astype(str).values.tolist()
+        worksheet.update(values)
+
+    print(f"Data written to Google Sheet '{spreadsheet_name}'")    
+
+def write_to_excel(dataframes: dict, output_dir: str = "data") -> tuple:
+    """
+    Writes multiple DataFrames to a timestamped Excel file.
+    
+    Args:
+        dataframes (dict): Dictionary where keys are sheet names and values are DataFrames.
+        output_dir (str): Directory where the Excel file will be saved.
+        
+    Returns:
+        tuple: (output_filepath, output_filename)
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Build timestamped filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"meisterplan_full_export_{timestamp}.xlsx"
+    output_filepath = os.path.join(output_dir, output_filename)
+
+    # Write DataFrames to Excel
+    with pd.ExcelWriter(output_filepath, engine='openpyxl') as writer:
+        for sheet_name, df in dataframes.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    print(f"Excel file written to {output_filepath}")
+    return output_filepath, output_filename
+
 def main():
+    
     print("Fetching projects...")
     projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31")
     print("Fetching allocations...")
@@ -59,14 +132,22 @@ def main():
     df_financials = pd.DataFrame(financials)
     df_milestones = pd.DataFrame(milestones)
 
-    # Write to Excel
-    with pd.ExcelWriter(output_filepath, engine='openpyxl') as writer:
-        df_projects.to_excel(writer, sheet_name='Projects', index=False)
-        df_allocations.to_excel(writer, sheet_name='Allocations', index=False)
-        df_financials.to_excel(writer, sheet_name='FinancialEvents', index=False)
-        df_milestones.to_excel(writer, sheet_name='Milestones', index=False)
+    dataframes = {
+        "Projects": df_projects,
+        "Allocations": df_allocations,
+        "Financials": df_financials,
+        "Milestones": df_milestones
+    }
+    
 
-    print(f"Exported all data to {output_filepath}")
+    # THIS BLOCK WRITES TO EXCEL
+    # excel_path, excel_filename = write_to_excel(dataframes)
+    
+    # THIS BLOCK WRITES TO GOOGLE SHEETS
+    gc = authenticate_gsheets()
+    if not gc:
+        return
+    write_to_gsheets(gc, "Meisterplan Resource Map", dataframes)
 
 if __name__ == "__main__":
     main()

@@ -6,10 +6,10 @@ import pandas as pd
 
 def gspreadoauth():
     """Authenticate with Google Sheets API using gspread."""
-    #use os.path to take a copied raw path string and properly handle it
+    # use os.path to take a copied raw path string and properly handle it
 
-    path_to_json = os.path.join(r"C:\Users\dmadaras\AppData\Roaming\Python\Python313\site-packages\gspread\credentials.json")
-    path_to_auth_user = os.path.join(r"C:\Users\dmadaras\AppData\Roaming\Python\Python313\site-packages\gspread", 'auth_user.json')
+    path_to_json = os.path.join(r"C:\Users\spencer\Documents\GitHub\Meisterplan\Credentials", 'credentials.json')
+    path_to_auth_user = os.path.join(r"CC:\Users\spencer\Documents\GitHub\Meisterplan\Credentials", 'auth_user.json')
    
 
     try:
