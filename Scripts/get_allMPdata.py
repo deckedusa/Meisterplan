@@ -6,7 +6,6 @@ import argparse
 from gspread_dataframe import set_with_dataframe
 from datetime import datetime
 from dotenv import load_dotenv
-# from Scripts.gspread_init import gspreadoauth
 
 # load API token and variables from .env file
 load_dotenv()
@@ -43,8 +42,11 @@ def fetch_paginated(endpoint):
     return all_items
 
 def authenticate_gsheets():
-    cred_path = os.path.join("credentials", "credentials.json")
-    auth_path = os.path.join("credentials", "auth_user.json")
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    CRED_DIR = os.path.join(BASE_DIR, "credentials")
+    
+    cred_path = os.path.join(CRED_DIR, "credentials.json")
+    auth_path = os.path.join(CRED_DIR, "auth_user.json")
 
     try:
         gc = gspread.oauth(
@@ -99,7 +101,7 @@ def write_to_gsheets(gc, spreadsheet_name: str, dataframes: dict):
    
     print(f"Data written to Google Sheet '{spreadsheet_name}'")    
 
-def write_to_excel(dataframes: dict, output_dir: str = "data") -> tuple:
+def write_to_excel(dataframes: dict, output_dir: str = "Data") -> tuple:
     """
     Writes multiple DataFrames to a timestamped Excel file.
     
@@ -110,13 +112,17 @@ def write_to_excel(dataframes: dict, output_dir: str = "data") -> tuple:
     Returns:
         tuple: (output_filepath, output_filename)
     """
+    # Base directory of the repo
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    DATA_DIR = os.path.join(BASE_DIR, output_dir)    
+    
     # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     # Build timestamped filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filename = f"meisterplan_full_export_{timestamp}.xlsx"
-    output_filepath = os.path.join(output_dir, output_filename)
+    output_filepath = os.path.join(DATA_DIR, output_filename)
 
     # Write DataFrames to Excel
     with pd.ExcelWriter(output_filepath, engine='openpyxl') as writer:
@@ -126,8 +132,7 @@ def write_to_excel(dataframes: dict, output_dir: str = "data") -> tuple:
     print(f"Excel file written to {output_filepath}")
     return output_filepath, output_filename
 
-def main():
-    
+def main(output_mode="gsheets"):
     print("Fetching projects...")
     projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31")
     print("Fetching allocations...")
@@ -136,28 +141,37 @@ def main():
     financials = fetch_paginated("financials?startDate=2024-01-01&finishDate=2030-12-31")
     print("Fetching milestones...")
     milestones = fetch_paginated("milestones?startDate=2024-01-01&finishDate=2030-12-31")
+    print("Fetching resources...")
+    resources = fetch_paginated("resources")
+
 
     # Create dataframes
     df_projects = pd.DataFrame(projects)
     df_allocations = pd.DataFrame(allocations)
     df_financials = pd.DataFrame(financials)
     df_milestones = pd.DataFrame(milestones)
+    df_resources = pd.DataFrame(resources)
 
     dataframes = {
         "Projects": df_projects,
         "Allocations": df_allocations,
         "Financials": df_financials,
-        "Milestones": df_milestones
+        "Milestones": df_milestones,
+        "Resources": df_resources
     }
     
     # THIS BLOCK WRITES TO EXCEL
-    # excel_path, excel_filename = write_to_excel(dataframes)
+    if output_mode in ("excel", "both"):
+        excel_path, excel_filename = write_to_excel(dataframes)
     
     # THIS BLOCK WRITES TO GOOGLE SHEETS
-    gc = authenticate_gsheets()
-    if not gc:
-        return
-    write_to_gsheets(gc, "Meisterplan Resource Map", dataframes)
+    if output_mode in ("gsheets", "both"):
+        gc = authenticate_gsheets()
+        if not gc:
+            return
+        write_to_gsheets(gc, "Meisterplan Resource Map 1", dataframes)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    mode = sys.argv[1] if len(sys.argv) > 1 else "gsheets"
+    main(output_mode=mode)
