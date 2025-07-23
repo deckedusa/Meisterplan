@@ -1,3 +1,5 @@
+# Old test code for trying to authenticate with Google Sheets
+
 import gspread
 
 gc = gspread.oauth(
