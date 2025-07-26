@@ -17,6 +17,16 @@ if not MP_URL or not MP_TOKEN:
     print("Missing MP_URL or MP_TOKEN in .env")
     exit()
 
+scenarios_from_env = {}
+for key, value in os.environ.items():
+    if key.startswith("MP_SCENARIO_"):
+        friendly_name = key.replace("MP_SCENARIO_", "").lower()
+        scenarios_from_env[friendly_name] = value
+if scenarios_from_env:
+    print("Loaded scenario aliases from .env file:")
+    for alias in scenarios_from_env:
+        print(f"  - {alias}")
+
 # build out headers
 headers = {
     "Authorization": f"Bearer {MP_TOKEN}",
@@ -24,9 +34,15 @@ headers = {
 }
 
 # Generic fetcher to support pagination
-def fetch_paginated(endpoint):
+def fetch_paginated(endpoint, scenario_id=None):
     all_items = []
     url = f"{MP_URL}/{endpoint}"
+    if scenario_id:
+        if '?' in url:
+            url += f"&scenario={scenario_id}"
+        else:
+            url += f"?scenario={scenario_id}"
+    
     while url:
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
@@ -42,6 +58,7 @@ def fetch_paginated(endpoint):
     return all_items
 
 def authenticate_gsheets():
+    # Authenticates with Google Sheets API using credentials
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     CRED_DIR = os.path.join(BASE_DIR, "credentials")
     
@@ -132,18 +149,24 @@ def write_to_excel(dataframes: dict, output_dir: str = "Data") -> tuple:
     print(f"Excel file written to {output_filepath}")
     return output_filepath, output_filename
 
-def main(output_mode="gsheets"):
+def main(output_mode="gsheets", scenario_id=None):
+    if scenario_id:
+        print(f"Fetching data from Scenario ID: {scenario_id}")
+        spreadsheet = "Meisterplan Resource Map 2 - Scenario"
+    else:
+        print(f"Fetching data from Plan of Record")
+        spreadsheet = "Meisterplan Resource Map 2 - Scenario" 
+    
     print("Fetching projects...")
-    projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31")
+    projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
     print("Fetching allocations...")
-    allocations = fetch_paginated("allocationSlices?startDate=2025-07-01&finishDate=2027-12-31&aggregation=MONTH")
+    allocations = fetch_paginated("allocationSlices?startDate=2025-07-01&finishDate=2027-12-31&aggregation=MONTH", scenario_id)
     print("Fetching financial events...")
-    financials = fetch_paginated("financials?startDate=2024-01-01&finishDate=2030-12-31")
+    financials = fetch_paginated("financials?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
     print("Fetching milestones...")
-    milestones = fetch_paginated("milestones?startDate=2024-01-01&finishDate=2030-12-31")
+    milestones = fetch_paginated("milestones?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
     print("Fetching resources...")
-    resources = fetch_paginated("resources")
-
+    resources = fetch_paginated("resources", scenario_id)
 
     # Create dataframes
     df_projects = pd.DataFrame(projects)
@@ -169,9 +192,24 @@ def main(output_mode="gsheets"):
         gc = authenticate_gsheets()
         if not gc:
             return
-        write_to_gsheets(gc, "Meisterplan Resource Map 1", dataframes)
+        write_to_gsheets(gc, spreadsheet, dataframes)
 
 if __name__ == "__main__":
-    import sys
-    mode = sys.argv[1] if len(sys.argv) > 1 else "gsheets"
-    main(output_mode=mode)
+    # Set up a more robust command-line argument parser
+    parser = argparse.ArgumentParser(
+        description="Fetch data from Meisterplan and export to Excel or Google Sheets. Can specify a scenario."
+    )
+    parser.add_argument(
+        "-m", "--output-mode", 
+        choices=["gsheets", "excel", "both"], 
+        default="gsheets", 
+        help="Specify the output destination (default: gsheets)."
+    )
+    parser.add_argument(
+        "-s", "--scenario-id", 
+        help="The alias (from .env file) or direct ID of the Meisterplan scenario. If omitted, fetches the Plan of Record."
+    )
+    args = parser.parse_args()
+
+    # Call the main function with the parsed arguments
+    main(output_mode=args.output_mode, scenario_id=args.scenario_id)
