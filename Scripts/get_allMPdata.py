@@ -155,7 +155,7 @@ def main(output_mode="gsheets", scenario_id=None):
         spreadsheet = "Meisterplan Resource Map 2 - Scenario"
     else:
         print(f"Fetching data from Plan of Record")
-        spreadsheet = "Meisterplan Resource Map 2 - Scenario" 
+        spreadsheet = "Meisterplan Resource Map 1 - PoR" 
     
     print("Fetching projects...")
     projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
