@@ -23,9 +23,9 @@ for key, value in os.environ.items():
         friendly_name = key.replace("MP_SCENARIO_", "").lower()
         scenarios_from_env[friendly_name] = value
 if scenarios_from_env:
-    print("Loaded scenario aliases from .env file:")
-    for alias in scenarios_from_env:
-        print(f"  - {alias}")
+    print(f"Loaded {len(scenarios_from_env)} scenario aliases from .env file:")
+    # for alias in scenarios_from_env:
+    #     print(f"  - {alias}")
 
 # build out headers
 headers = {
@@ -43,7 +43,11 @@ def fetch_paginated(endpoint, scenario_id=None):
         else:
             url += f"?scenario={scenario_id}"
     
+    page_count = 1
     while url:
+        # *** DEBUGGING: Print the URL we are about to call ***
+        # print(f"DEBUG: Calling page {page_count}: {url}")
+
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             print(f"Failed to fetch data from {endpoint}: {response.status_code}")
@@ -52,9 +56,20 @@ def fetch_paginated(endpoint, scenario_id=None):
         data = response.json()
         items = data.get("items", [])
         all_items.extend(items)
+        
         url = data.get("meta", {}).get("next")
+        
+        # *** DEBUGGING: Print the 'next' link we received from the API ***
+        # if url:
+        #     print(f"DEBUG: API returned next link: {url}")
+        # else:
+        #     print("DEBUG: No more pages.")
+
         if url and not url.startswith("http"):
             url = MP_URL + url
+        
+        page_count += 1
+            
     return all_items
 
 def authenticate_gsheets():
@@ -157,6 +172,7 @@ def main(output_mode="gsheets", scenario_id=None):
         print(f"Fetching data from Plan of Record")
         spreadsheet = "Meisterplan Resource Map 1 - PoR" 
     
+    # OLD CODE BLOCK
     print("Fetching projects...")
     projects = fetch_paginated("projects?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
     print("Fetching allocations...")
@@ -167,6 +183,19 @@ def main(output_mode="gsheets", scenario_id=None):
     milestones = fetch_paginated("milestones?startDate=2024-01-01&finishDate=2030-12-31", scenario_id)
     print("Fetching resources...")
     resources = fetch_paginated("resources", scenario_id)
+
+    # NEW CODE BLOCK
+    # print("Fetching projects...")
+    # projects = fetch_paginated("projects?", scenario_id)
+    # print("Fetching allocations...")
+    # allocations = fetch_paginated("allocationSlices?aggregation=MONTH", scenario_id)
+    # print("Fetching financial events...")
+    # financials = fetch_paginated("financials", scenario_id)
+    # print("Fetching milestones...")
+    # milestones = fetch_paginated("milestones", scenario_id)
+    # print("Fetching resources...")
+    # resources = fetch_paginated("resources", scenario_id)
+
 
     # Create dataframes
     df_projects = pd.DataFrame(projects)
@@ -211,5 +240,18 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Call the main function with the parsed arguments
-    main(output_mode=args.output_mode, scenario_id=args.scenario_id)
+    # *** UPDATED: Look up the scenario alias and get the real ID ***
+    scenario_input = args.scenario_id
+    final_scenario_id = None
+
+    if scenario_input:
+        # Check if the input from the command line is a known alias
+        if scenario_input in scenarios_from_env:
+            final_scenario_id = scenarios_from_env[scenario_input]
+            print(f"Found alias '{scenario_input}'. Using Scenario ID: {final_scenario_id}")
+        else:
+            # If it's not an alias, assume it's the direct ID
+            final_scenario_id = scenario_input
+
+    # Call the main function with the correct (looked-up) scenario ID
+    main(output_mode=args.output_mode, scenario_id=final_scenario_id)

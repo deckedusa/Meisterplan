@@ -26,9 +26,9 @@ for key, value in os.environ.items():
         friendly_name = key.replace("MP_SCENARIO_", "").lower()
         scenarios_from_env[friendly_name] = value
 if scenarios_from_env:
-    print("Loaded scenario aliases from .env file:")
-    for alias in scenarios_from_env:
-        print(f"  - {alias}")
+    print(f"Loaded {len(scenarios_from_env)} scenario aliases from .env file:")
+    # for alias in scenarios_from_env:
+    #     print(f"  - {alias}")
 
 # Set up headers for API requests
 asana_headers = {
@@ -149,7 +149,7 @@ def fetch_paginated(endpoint, scenario_id=None):
     page_count = 1
     while url:
         # *** DEBUGGING: Print the URL we are about to call ***
-        print(f"DEBUG: Calling page {page_count}: {url}")
+        # print(f"DEBUG: Calling page {page_count}: {url}")
 
         response = requests.get(url, headers=mp_headers)
         if response.status_code != 200:
@@ -163,10 +163,10 @@ def fetch_paginated(endpoint, scenario_id=None):
         url = data.get("meta", {}).get("next") if isinstance(data, dict) else None
         
         # *** DEBUGGING: Print the 'next' link we received from the API ***
-        if url:
-            print(f"DEBUG: API returned next link: {url}")
-        else:
-            print("DEBUG: No more pages.")
+        # if url:
+        #     print(f"DEBUG: API returned next link: {url}")
+        # else:
+        #     print("DEBUG: No more pages.")
 
         if url and not url.startswith("http"):
             url = MP_URL + url
@@ -350,13 +350,18 @@ def main(scenario_id=None):
 
 # Main script execution
 if __name__ == "__main__":
-    # Set up a more robust command-line argument parser
-    parser = argparse.ArgumentParser(
-        description="Fetch data from Meisterplan and export to Excel or Google Sheets. Can specify a scenario."
-    )
-    parser.add_argument(
-        "-s", "--scenario-id", 
-        help="The alias (from .env file) or direct ID of the Meisterplan scenario. If omitted, fetches the Plan of Record."
-    )
+    parser = argparse.ArgumentParser(description="Fetch data from Meisterplan and Asana.")
+    parser.add_argument("-s", "--scenario-id", help="Alias (from .env) or direct ID of the Meisterplan scenario.")
     args = parser.parse_args()
-    main(scenario_id=args.scenario_id)
+
+    scenario_input = args.scenario_id
+    final_scenario_id = None
+
+    if scenario_input:
+        if scenario_input in scenarios_from_env:
+            final_scenario_id = scenarios_from_env[scenario_input]
+            print(f"Found alias '{scenario_input}'. Using Scenario ID: {final_scenario_id}")
+        else:
+            final_scenario_id = scenario_input
+    
+    main(scenario_id=final_scenario_id)
